@@ -1,6 +1,16 @@
 # Impact Agent
 
-This repository holds the initial environment setup for an Impact Agent project built on the Aetherion SDK. It currently contains only project configuration (`pyproject.toml`, `uv.lock`, `.gitignore`). **No application features are implemented yet.**
+The Impact Agent takes a Technical Design Document (TDD) as plain text, analyses the impact of each proposed change, and returns the same TDD with impact analysis added. It is built on the Aetherion SDK.
+
+Implemented so far (all on dummy data):
+
+- a TDD parser that turns the text into the contract's `ParsedTDD`, recording anything it cannot resolve instead of guessing
+- the impact analysis core and renderer: deterministic grouping, code-generated warnings, validation of the LLM's reply, per-change impact blocks and a roll-up, and stripping so reruns never duplicate sections
+- a fake graph provider with fixture scenarios, and a fake LLM
+- a FastAPI endpoint (`POST /impact`) with in-memory idempotency by correlation id
+- dummy orchestrator and coding-agent stubs, and a script that regenerates the golden expected output from the real pipeline
+
+Not implemented yet: a real code graph (such as Neo4j), a real LLM, and production agent integration. The graph data and the LLM are fixtures and fakes.
 
 Tooling: Python 3.12.10, [uv](https://docs.astral.sh/uv/), Aetherion SDK 0.0.55, FastAPI, Uvicorn, Pydantic, pydantic-settings, pytest, pytest-asyncio, Ruff, and the Temporal CLI for local workflow development.
 
@@ -92,7 +102,10 @@ Note that the SDK's import name is `aetherion_sdk`.
 
 - Create your own feature branch from `main`: `git switch main && git switch -c your-branch-name`
 - Never commit `.venv/` or real `.env` files. They are listed in `.gitignore`. A `.env.example` containing placeholder values only is allowed.
-- Application implementation is still pending; there is no app entry point or test suite yet.
+- Run the tests, Ruff checks and the demo scripts described in the Running section before opening a pull request.
+- The contract in `docs/contracts.md` is shared between both sides; changes to it need both people's approval.
+- `tests/fixtures/tdd/sample_expected_output.txt` is generated. After an intentional rendering change, regenerate it with `uv run python scripts/regenerate_expected_output.py` and review the diff.
+- Real graph, LLM and agent integrations are future work; keep fixtures clearly labelled as dummy data.
 
 ## Troubleshooting
 
