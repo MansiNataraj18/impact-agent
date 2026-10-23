@@ -88,3 +88,9 @@ def test_stub_flow_submissions_agree(client, sample_text):
 
 def test_stub_flow_script_runs(sample_text):
     assert "Roll-up: 15. IMPACT ANALYSIS" in load_stub_flow().run_flow()
+
+
+def test_output_matches_the_golden_file_byte_for_byte(output):
+    path = ROOT / "tests" / "fixtures" / "tdd" / "sample_expected_output.txt"
+    with open(path, encoding="utf-8", newline="") as handle:
+        assert output == handle.read()

@@ -137,32 +137,29 @@ field updates sendReportRequestedLinkCcEmailAddresses to
 UI continues to display that comma-separated string unchanged on reload.
 Impact Analysis (Change 1):
 Risk: Medium
-Summary: The code change is small and local to the blur handler, but it alters the stored format
-of sendReportRequestedLinkCcEmailAddresses, which accounts-service stores (persistence code not
-inspected) and candidate-service reads.
+Summary: Fixture analysis: the change touches the listed items.
 Direct Impact:
-- ui::AtsIntegrationSectionView (view.tsx): renders the field and registers
-handleCcEmailAddressesBlur as its blur handler, so every edit of the field passes through the
-changed code.
-- ui::atsIntegrationChange: receives the rejoined string and updates the settings form state, so
-the delimiter produced here is what gets saved.
+- ui::AtsIntegrationSectionView
+  (src/common/accounts/client/components/SettingsForm/sections/AtsIntegrationSection/view.tsx):
+  Depends on the changed code (calls).
+- ui::atsIntegrationChange
+  (src/common/accounts/client/components/SettingsForm/sections/AtsIntegrationSection/view.tsx):
+  Depends on the changed code (calls).
 Potential Impact:
-- ui::SettingsForm (depth 2): submits the form state on save, so the semicolon-separated value
-reaches the API.
-- accounts-service::AtsIntegrationSettingsInput.sendReportRequestedLinkCcEmailAddresses (depth
-3): stored as a plain String; the persistence code was not provided, so hidden normalization
-cannot be ruled out.
-- candidate-service::SendDirectRequestEmailHandler.validateEmails (depth 4): reads the stored
-value and splits on [;,]+, so it accepts both separators.
+- ui::SettingsForm (src/common/accounts/client/components/SettingsForm/index.tsx) (depth 2):
+  Depends on the changed code (calls).
+- accounts-service::AtsIntegrationSettingsInput.sendReportRequestedLinkCcEmailAddresses
+  (src/main/resources/graphql/settings.graphqls) (depth 3): Depends on the changed code
+  (exposes).
+- candidate-service::SendDirectRequestEmailHandler.validateEmails
+  (src/main/kotlin/com/asurint/candidate/handlers/commands/SendDirectRequestEmailHandler.kt)
+  (depth 4): Depends on the changed code (reads).
 Tests to Run:
-- Existing: none found that cover handleCcEmailAddressesBlur.
-- Existing, run after the fix: SendDirectRequestEmailHandler.handle tests with semicolon- and
-comma-separated clientCCNotificationsEmails (test location not yet known).
-- Recommended: the new view.test.tsx cases described in Change 2.
+- ui::AtsIntegrationSectionView blur test
+  (src/common/accounts/client/components/SettingsForm/sections/AtsIntegrationSection/view.test.tsx):
+  Depends on the changed code (tests).
 Warnings and Unresolved:
-- No existing test covers this symbol; add the regression test before merging.
-- Unresolved: the accounts-service resolver or mapper that persists this field (see Open
-Question 1).
+- None.
 Change 2: handleCcEmailAddressesBlur (create)
 File: src/common/accounts/client/components/SettingsForm/sections/AtsIntegrationSection/
 view.test.tsx
@@ -205,7 +202,7 @@ Direct Impact:
 Potential Impact:
 - None.
 Tests to Run:
-- This file is the new regression test; run it before and after the change to Change 1.
+- None.
 Warnings and Unresolved:
 - None.
 Change 3: ReportEventsCCEmailAddressSettings (reference (read, not changed))
@@ -227,13 +224,13 @@ Done when:
 - No code change is made to Candidate Submitted Notifications display behavior.
 Impact Analysis (Change 3):
 Risk: None (read only, no change proposed)
-Summary: No code changes here, so no impact is expected.
+Summary: No code changes are proposed here, so no impact is expected.
 Direct Impact:
 - None.
 Potential Impact:
 - None.
 Tests to Run:
-- None required.
+- None.
 Warnings and Unresolved:
 - None.
 accounts-service — no change
@@ -270,15 +267,13 @@ Done when:
 - Comma-separated stored values remain sendable without backend parser changes.
 Impact Analysis (Change 4):
 Risk: None (read only, no change proposed)
-Summary: No code changes here. This parser is a downstream consumer of the field changed in
-Change 1.
+Summary: No code changes are proposed here, so no impact is expected.
 Direct Impact:
 - None.
 Potential Impact:
 - None.
 Tests to Run:
-- Run the existing validateEmails and SendDirectRequestEmailHandler.handle tests after the
-Change 1 fix (test location not yet known).
+- None.
 Warnings and Unresolved:
 - None.
 reports-api — no change
@@ -493,32 +488,43 @@ again.
 15. IMPACT ANALYSIS
 ===================
 Overall Risk: Medium
-Summary: The proposed UI change is low in code size but changes the stored delimiter of
-sendReportRequestedLinkCcEmailAddresses. Downstream parsing accepts both delimiters, so the main
-residual risk is unverified normalization in the accounts-service persistence code.
+Summary: 1 change(s) analysed; overall risk medium; 2 directly and 3 potentially affected
+  item(s); 1 test(s) to run.
 Graph source: dummy fixture (not a real code graph)
 
 Impact by Change:
 - Change 1 (modify) handleCcEmailAddressesBlur: Medium
-- Change 2 (create) view.test.tsx: Not applicable (new file)
-- Change 3 (reference) ReportEventsCCEmailAddressSettings: None (read only)
-- Change 4 (reference) validateEmails: None (read only)
+- Change 2 (create) handleCcEmailAddressesBlur: Not applicable (new file, not in the dependency
+  graph)
+- Change 3 (reference) ReportEventsCCEmailAddressSettings: None (read only, no change proposed)
+- Change 4 (reference) validateEmails: None (read only, no change proposed)
 
 Tests to Run:
-- Existing: none found that cover handleCcEmailAddressesBlur.
-- Existing, run after the fix: SendDirectRequestEmailHandler.handle tests with semicolon- and
-comma-separated clientCCNotificationsEmails (test location not yet known).
-- Recommended: the new view.test.tsx cases described in Change 2.
+- AtsIntegrationSectionView blur test
+  (src/common/accounts/client/components/SettingsForm/sections/AtsIntegrationSection/view.test.tsx)
+- Planned (to add): In ui AtsIntegrationSectionView, enter
+  'qa1@example.com;qa2@example.com;qa3@example.com' into sendReportRequestedLinkCcEmailAddresses
+  and blur the field; today the blur handler emits
+  'qa1@example.com,qa2@example.com,qa3@example.com', after the fix it must emit
+  'qa1@example.com;qa2@example.com;qa3@example.com'.
+- Planned (to add): In ui AtsIntegrationSectionView, enter ' alpha@example.com ;
+  beta@example.com ;; gamma@example.com ' and blur the field.
+- Planned (to add): In ui AtsIntegrationSectionView, start with an empty
+  sendReportRequestedLinkCcEmailAddresses value and blur without entering any emails.
+- Planned (to add): Render ui AtsIntegrationSectionView with an existing stored value
+  'old1@example.com,old2@example.com' and do not edit the field.
+- Planned (existing): candidate-service SendDirectRequestEmailHandler.handle processes
+  clientCCNotificationsEmails set to 'one@example.com;two@example.com;three@example.com'.
+- Planned (existing): candidate-service SendDirectRequestEmailHandler.handle processes
+  clientCCNotificationsEmails set to 'old1@example.com,old2@example.com'.
 
 TDD Claims vs Graph:
-- accounts-service (TDD: no change): Needs review. The graph places it on the save path, and the
-TDD already lists the persistence code as unverified.
-- candidate-service (TDD: reference only): Consistent. The graph shows it as a downstream
-reader, and validateEmails accepts both delimiters.
-- reports-api (TDD: no change): Consistent. No path from the changed code was found in the graph.
-- pdf-service (TDD: no change): Consistent. No path from the changed code was found in the graph.
+- accounts-service (TDD: no change): Needs review. The graph lists 1 affected item(s) in this
+  service.
+- reports-api (TDD: no change): Consistent. No affected items were found in this service in the
+  graph.
+- pdf-service (TDD: no change): Consistent. No affected items were found in this service in the
+  graph.
 
 Warnings and Unresolved Items:
-- No existing test covers handleCcEmailAddressesBlur; add the regression test before merging.
-- Unresolved: the accounts-service resolver or mapper that persists
-sendReportRequestedLinkCcEmailAddresses (see Open Question 1).
+- None.

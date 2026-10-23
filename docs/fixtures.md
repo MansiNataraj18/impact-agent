@@ -33,4 +33,12 @@ Both live in `tests/fixtures/tdd/`:
 
 - `sample_input.txt`: a TDD with 14 sections and four changes (1 modify, 2 create, 3 and 4
   reference). It has form feeds and no final newline. Never open and re-save it; read it as-is.
-- `sample_expected_output.txt`: the expected output for the sample input.
+- `sample_expected_output.txt`: the golden output. It is **generated** by the real pipeline
+  (sample input, parser, fake provider, dummy LLM), not written by hand, and the end-to-end test
+  compares against it byte for byte. To regenerate it after an intentional change:
+
+  ```zsh
+  uv run python scripts/regenerate_expected_output.py
+  ```
+
+  Review the diff before committing it.
