@@ -79,7 +79,7 @@ Warnings and Unresolved Items:
 ```
 
 Layout rules:
-- Plain text, flush left, wrapped at about 96 characters.
+- Plain text, wrapped at 96 characters. Continuation lines of a wrapped line are indented by two spaces so that generated blocks can be recognised and stripped.
 - Roll-up heading underlined with `=` equal to the heading length.
 - The roll-up number is `last_section_number + 1`.
 - Fixture data prints `Graph source: dummy fixture (not a real code graph)`.
@@ -252,7 +252,7 @@ Pipeline order: `strip_impact_sections` then `parse_tdd`, then `GraphProvider.ge
 
 ## 9. Preservation and reruns
 
-- Original text is never modified, reflowed or normalised, including page-break characters, line endings and a missing final newline.
+- Original text is never modified, reflowed or normalised, including page-break characters and line endings. The one exception: if the input does not end with a newline, the final input line gains the terminating newline (in the input's own line-ending style) when content is appended. Reruns remain byte-identical.
 - Additions only: removing the added lines from the output reproduces the input exactly.
 - `strip_impact_sections` removes previously generated blocks and roll-up by exact label and structure, and nothing else.
 - Running the pipeline on its own output gives byte-identical output with no duplicate sections.
@@ -268,3 +268,71 @@ All external responses carry `schema_version`. Changing any model or enum in thi
 - How long idempotent results are kept, and where (in-memory for now).
 - How the Aetherion SDK is used by the agent entry point.
 - Line-wrap width and exact wording of non-analysed risk text, once reviewed on real output.
+
+## 12. Rendering details (as implemented)
+
+Values below were read from the code constants named in each row (paths under `src/impact_agent/`).
+
+### 12.1 Layout
+- Wrap width 96 and continuation indent of two spaces: `render/blocks.py` `WRAP_WIDTH`, `CONTINUATION_INDENT`.
+- Empty lists render as `- None.`: `render/blocks.py` `NONE_ITEM`.
+- Generated lines copy the input's line-ending style (CRLF if the input contains `\r\n`, else LF): `render/renderer.py` `render_tdd`.
+
+### 12.2 Risk text, labels and fixed texts
+| What | Value | Source |
+|---|---|---|
+| Risk text, `create` | `Not applicable (new file, not in the dependency graph)` | `core/analyzer.py` `REASON_CREATE` |
+| Risk text, `reference` | `None (read only, no change proposed)` | `core/analyzer.py` `REASON_REFERENCE` |
+| Risk text, skipped change | `Not assessed ({reason})`, or `Not assessed` if there is no reason | `render/blocks.py` `NOT_ASSESSED`, `risk_text` |
+| Skipped reason, no action | `Change action could not be determined.` | `core/analyzer.py` `REASON_NO_ACTION` |
+| Overall Risk, nothing analysed | `Not applicable (no change was analysed)` | `render/rollup.py` `OVERALL_NOT_APPLICABLE` |
+| ClaimFinding `consistent` | `Consistent` | `render/rollup.py` `FINDING_TEXT` |
+| ClaimFinding `needs_review` | `Needs review` | `render/rollup.py` `FINDING_TEXT` |
+| Graph source, `fixture` | `dummy fixture (not a real code graph)` | `render/rollup.py` `SOURCE_TEXT` |
+| Graph source, `graph` | `code graph` | `render/rollup.py` `SOURCE_TEXT` |
+| Graph source, nothing analysed | `none (no graph data used)` | `render/rollup.py` `SOURCE_NONE` |
+| Claim text | `no change` | `core/analyzer.py` `CLAIM_NO_CHANGE` |
+| Claim note, `needs_review` | `The graph lists {n} affected item(s) in this service.` | `core/analyzer.py` `NOTE_NEEDS_REVIEW` |
+| Claim note, `consistent` | `No affected items were found in this service in the graph.` | `core/analyzer.py` `NOTE_CONSISTENT` |
+| Placeholder for a missing action or symbol | `unknown` | `core/analyzer.py` `UNKNOWN`, `render/rollup.py` `UNKNOWN` |
+
+### 12.3 Summaries
+| What | Value | Source |
+|---|---|---|
+| Roll-up summary | `{a} change(s) analysed; overall risk {risk}; {d} directly and {p} potentially affected item(s); {t} test(s) to run.` (`{risk}` is the lowercase risk value; `{t}` counts graph tests only) | `core/analyzer.py` `SUMMARY_TEMPLATE` |
+| Roll-up summary, nothing analysed | `No change required graph analysis.` | `core/analyzer.py` `SUMMARY_NOTHING_ANALYSED` |
+| Summary, `create` | `New files have no existing callers or dependents, so nothing in the graph is affected.` | `core/analyzer.py` `SUMMARY_CREATE` |
+| Summary, `reference` | `No code changes are proposed here, so no impact is expected.` | `core/analyzer.py` `SUMMARY_REFERENCE` |
+| Summary, skipped | `This change was not analysed against the graph.` | `core/analyzer.py` `SUMMARY_NOT_ANALYSED` |
+
+The roll-up summary is deterministic; it does not use the LLM.
+
+### 12.4 Warnings (code-generated)
+| Warning | Source |
+|---|---|
+| `No tests cover this change; add the regression test before merging.` | `core/evidence.py` `WARNING_NO_TESTS` |
+| `No callers, dependents or tests were found for the changed code.` | `core/evidence.py` `WARNING_EMPTY_GRAPH` |
+| `{n} affected item(s) have no location in the graph.` | `core/evidence.py` `WARNING_MISSING_LOCATION` |
+| `The changed location could not be resolved: {reason}` | `core/evidence.py` `WARNING_UNRESOLVED_LOCATION` |
+| `Unresolved ({field}): {reason}` | `core/evidence.py` `WARNING_UNRESOLVED_FIELD` |
+| `Unresolved: {reason}` | `core/evidence.py` `WARNING_UNRESOLVED` |
+| `Duplicate graph node id ignored: {id}` | `core/evidence.py` `WARNING_DUPLICATE_ID` |
+| `No graph was supplied for this change.` | `core/evidence.py` `WARNING_NO_GRAPH` |
+| `The section number could not be determined.` | `core/analyzer.py` `WARNING_NO_SECTION_NUMBER` |
+| `LLM output was invalid; explanations are unavailable.` | `core/validation.py` `WARNING_LLM_INVALID` |
+| `LLM reason ignored for unknown item: {id}` | `core/validation.py` `WARNING_UNKNOWN_NODE` |
+| `Impact block for Change {n} could not be placed: insertion position missing.` | `render/renderer.py` `WARNING_NOT_PLACED` |
+| `Impact block for Change {n} could not be placed: insertion position outside the text.` | `render/renderer.py` `WARNING_OUT_OF_RANGE` |
+
+In the roll-up, per-change warnings are prefixed `Change {n}: ` and the list is deduplicated in order.
+
+### 12.5 LLM reply schema and fallbacks
+- Schema: `{"summary": str, "risk_level": "low" | "medium" | "high", "reasons": {"<node id>": "<one line>"}}`. Source: `core/prompt.py` `INSTRUCTIONS`.
+- Invalid JSON or wrong shape: summary `Impact explanations are unavailable; the lists below come from the graph only.` (`core/validation.py` `FALLBACK_SUMMARY`), risk `medium` (`FALLBACK_RISK`), plus the `LLM output was invalid` warning above.
+- Missing or invalid risk: `medium` (`core/validation.py` `FALLBACK_RISK`).
+- Item with no reason: `Depends on the changed code ({relation}).` (`core/validation.py` `PLACEHOLDER_REASON`).
+- Empty graph: no LLM call; summary is the empty-graph warning text and risk is `low`.
+
+### 12.6 Engine and models
+- `ImpactEngine.enrich` raises `ValueError("Input still contains impact sections; call strip_impact_sections first.")` when `strip_impact_sections(tdd_text) != tdd_text`. Source: `core/engine.py` `ERROR_UNSTRIPPED`. The positions in `ParsedTDD` refer to the stripped text, so `enrich` never strips.
+- `ImpactExplanation.graph_source` is required, including for changes that are not analysed. When nothing was analysed, `fixture` is used and the renderer prints `none (no graph data used)`. Source: `models/impact.py`, `core/analyzer.py`.
