@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-SAMPLE = Path(__file__).resolve().parent.parent / "fixtures" / "tdd" / "sample_input.txt"
+SAMPLE = Path(__file__).resolve().parent / "fixtures" / "tdd" / "sample_input.txt"
 
 
 @pytest.fixture(scope="session")
