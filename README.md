@@ -104,3 +104,51 @@ If `aetherion_sdk` cannot be imported, or `uv pip show aetherion-sdk` finds noth
 
 **Temporal already running on port 7233**
 If `temporal server start-dev` fails because the port is in use, a server is probably already running. Check with `lsof -i :7233`. You can reuse that server (UI at http://localhost:8233) or stop the process before starting a new one.
+
+## Running
+
+All commands run from the project root. Everything below uses dummy data: fixture graphs and a fake LLM. No real code graph, model or Aetherion service is called.
+
+```zsh
+# Set up
+uv sync
+
+# Tests (pytest is configured with -p no:phoenix; see the note below)
+uv run pytest
+
+# Lint and format checks
+uv run ruff check src tests scripts
+uv run ruff format --check src tests scripts
+
+# Core demo: hand-built parsed TDD, fake graph, fake LLM
+uv run python scripts/demo_core.py
+
+# Stub flow: orchestrator stub -> API -> coding agent stub, in process (no network)
+uv run python scripts/run_stub_flow.py
+```
+
+Start the API (the package is not installed, so point uvicorn at `src`):
+
+```zsh
+uv run uvicorn impact_agent.api.app:create_app --factory --app-dir src --reload
+```
+
+Then, in another terminal:
+
+```zsh
+curl localhost:8000/health
+# {"status":"ok"}
+
+curl -s localhost:8000/impact -H 'content-type: application/json' \
+  -d '{"tdd_text": "..."}'
+```
+
+`POST /impact` takes `tdd_text` plus optional `project`, `repository`, `revision` and `correlation_id`, and returns the enriched TDD. See `docs/contracts.md` for the response shape.
+
+**Pytest note:** `pyproject.toml` passes `-p no:phoenix` to pytest. The `phoenix` pytest plugin comes in through the Aetherion SDK's dependencies and crashes at startup because of a `graphql-core` version conflict. Disabling it is only a workaround for that conflict.
+
+More documentation:
+
+- `docs/contracts.md`: the agreed contract between the parser/API side and the impact core
+- `docs/fixtures.md`: the fixture graphs, the sample TDD files and how to regenerate the golden output
+- `docs/implementation-plan.md`: the original implementation plan
