@@ -15,6 +15,7 @@ SCENARIOS = (
     "invalid_risk",
     "empty",
     "extra_item",
+    "minimal_valid",
 )
 
 
@@ -25,6 +26,15 @@ def scripted_reply(scenario: str, node_ids: Iterable[str]) -> str:
     valid = {"summary": "Fake summary.", "risk_level": "medium", "reasons": reasons}
     if scenario == "valid":
         return json.dumps(valid)
+    if scenario == "minimal_valid":
+        # Valid reply with no per-item reasons; used by the dummy app default (fixture data).
+        return json.dumps(
+            {
+                "summary": "Fixture analysis: the change touches the listed items.",
+                "risk_level": "medium",
+                "reasons": {},
+            }
+        )
     if scenario == "invalid_json":
         return '{"summary": "Fake summary.", "risk_level": '
     if scenario == "wrong_shape":
