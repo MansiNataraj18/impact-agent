@@ -80,16 +80,15 @@ def test_title_skipped_when_generated_line_or_rule_follows():
 def test_missing_summary_section():
     parsed = parse_tdd("TECHNICAL DESIGN DOCUMENT\nT\n1. REQUIREMENTS\nx\n")
     assert parsed.summary is None
-    assert [(u.scope, u.field) for u in parsed.unresolved] == [("section", "summary")]
+    assert ("section", "summary") in [(u.scope, u.field) for u in parsed.unresolved]
 
 
 def test_glued_heading_recorded_not_split():
     text = "TECHNICAL DESIGN DOCUMENT\nT\n1. SUMMARY\nsome text 2. REQUIREMENTS\nmore\n"
     parsed = parse_tdd(text)
     assert parsed.last_section_number == 1
-    assert [(u.scope, u.reason, u.line) for u in parsed.unresolved] == [
-        ("section", "Possible glued section heading", 3)
-    ]
+    glued = [u for u in parsed.unresolved if u.reason == "Possible glued section heading"]
+    assert [(u.scope, u.line) for u in glued] == [("section", 3)]
     norm = normalise_lines(text)[1]
     assert find_glued_headings(norm, find_sections(norm)) == [3]
 

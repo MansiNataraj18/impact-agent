@@ -1,8 +1,12 @@
 from impact_agent.models.common import UnresolvedItem
-from impact_agent.models.parsed_tdd import ParsedTDD
+from impact_agent.models.parsed_tdd import ParsedChange, ParsedTDD, PlannedTest
+from impact_agent.parser import changes as changes_parser
+from impact_agent.parser import tests_section
 from impact_agent.parser.normalize import collapse, normalise_lines
 from impact_agent.parser.sections import (
+    SECTION_CHANGES,
     SECTION_SUMMARY,
+    SECTION_TESTING,
     TITLE_MARKER,
     Section,
     find_glued_headings,
@@ -54,7 +58,24 @@ def _parse(text: str) -> ParsedTDD:
         for index in find_glued_headings(norm, sections)
     ]
 
-    changes: list = []
+    changes: list[ParsedChange] = []
+    no_change_services: list[str] = []
+    changes_section = find_section(sections, SECTION_CHANGES)
+    if changes_section is None:
+        unresolved.append(changes_parser.missing_section_item())
+    else:
+        changes, no_change_services, change_unresolved = changes_parser.parse_changes(
+            norm, changes_section, has_following_heading=changes_section.end < len(norm)
+        )
+        unresolved += change_unresolved
+
+    planned_tests: list[PlannedTest] = []
+    testing_section = find_section(sections, SECTION_TESTING)
+    if testing_section is None:
+        unresolved.append(tests_section.missing_section_item())
+    else:
+        planned_tests = tests_section.parse_planned_tests(norm, testing_section)
+
     if not sections and not changes:
         return ParsedTDD(
             title=title,
@@ -65,6 +86,8 @@ def _parse(text: str) -> ParsedTDD:
         title=title,
         summary=summary,
         changes=changes,
+        no_change_services=no_change_services,
+        planned_tests=planned_tests,
         last_section_number=sections[-1].number if sections else None,
         unresolved=unresolved,
     )
