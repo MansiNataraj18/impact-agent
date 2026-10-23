@@ -1,0 +1,428 @@
+TECHNICAL DESIGN DOCUMENT
+Preserve semicolon-separated ATS link CC email addresses in UI and storage
+Generated: 2026-10-21T10:01:37.094834+00:00
+############################################################
+
+1. SUMMARY
+==========
+In ATS Portal Service settings, the 'Enable Link to user placing order' CC Email Addresses field
+does not retain semicolon separators after save and reload. The reported behavior is that values
+entered as semicolon-separated are converted to comma-separated, unlike other CC email fields such
+as Candidate Submitted Notifications. The issue is visible when a client administrator edits this
+field, saves settings, and reloads the page.
+
+2. REQUIREMENTS
+===============
+- When a client administrator enters multiple CC email addresses for
+AtsIntegrationSettings.sendReportRequestedLinkCcEmailAddresses separated by semicolons, the saved
+value must preserve semicolons so the UI can later display the same semicolon-separated string.
+- The ATS integration UI field for sendReportRequestedLinkCcEmailAddresses must no longer convert
+semicolon-separated input to comma-separated on blur, save, or reload.
+- Existing stored comma-separated values for
+AtsIntegrationSettings.sendReportRequestedLinkCcEmailAddresses must remain readable and display
+unchanged until the field is edited and saved again.
+- Parsing of CC email addresses for downstream email sending must continue to accept both
+semicolon-separated and comma-separated stored values.
+- Behavior of other CC email fields, including Candidate Submitted Notifications fields represented
+by CandidateDirectSettings and CustomRecipientList emailAddresses, must remain unchanged.
+Non-functional:
+- The fix must be limited to the ATS integration CC email field and must not change GraphQL schema
+shapes for existing settings fields.
+- Automated regression coverage must demonstrate that the current semicolon-to-comma conversion
+fails before the fix and passes after it.
+
+3. ROOT CAUSE
+=============
+Accepted at: ui/src/common/accounts/client/components/SettingsForm/sections/AtsIntegrationSection/
+view.tsx:AtsIntegrationSectionView
+— handleCcEmailAddressesChange copies the raw input string into
+sendReportRequestedLinkCcEmailAddresses.
+Validated at:
+ui/src/common/accounts/client/components/SettingsForm/sections/AtsIntegrationSection/
+view.tsx:handleCcEmailAddressesBlur
+— the field is split on both semicolons and commas, trimmed, empties removed, and then rejoined
+with commas; it does not preserve the original semicolon separator.
+Transformed at:
+ui/src/common/accounts/client/components/SettingsForm/sections/AtsIntegrationSection/
+view.tsx:handleCcEmailAddressesBlur
+
+— semicolon-separated input is explicitly transformed into a comma-separated string.
+Stored at: accounts-service/src/main/resources/graphql/
+settings.graphqls:AtsIntegrationSettingsInput.sendReportRequestedLinkCcEmailAddresses
+— the field is accepted as a plain String; the persistence implementation is not shown in the
+evidence, so no backend normalization is verified there.
+Consumed at: candidate-service/src/main/kotlin/com/asurint/candidate/handlers/commands/
+SendDirectRequestEmailHandler.kt:validateEmails
+— downstream parsing splits on both semicolons and commas, so it can read either representation.
+Confirmed: The UI is the verified source of the semicolon-to-comma conversion —
+ui/src/common/accounts/client/components/SettingsForm/sections/AtsIntegrationSection/
+view.tsx:handleCcEmailAddressesBlur
+rejoins parsed emails with ",".
+Confirmed: Downstream email sending is not dependent on commas specifically —
+candidate-service/src/main/kotlin/com/asurint/candidate/handlers/commands/
+SendDirectRequestEmailHandler.kt:validateEmails
+accepts both ";" and "," delimiters.
+Hypothesis: accounts-service persists whatever string the UI submits for
+sendReportRequestedLinkCcEmailAddresses —
+accounts-service/src/main/resources/graphql/
+settings.graphqls:AtsIntegrationSettingsInput.sendReportRequestedLinkCcEmailAddresses
+defines the field as String, but the resolver/entity code that writes it was not shown.
+Unknown: Which accounts-service resolver/entity performs the actual assignment for
+AtsIntegrationSettings.sendReportRequestedLinkCcEmailAddresses — inspecting the mutation resolver
+and persistence mapper for settings updates would confirm whether any backend normalization also
+occurs.
+Not the cause: Candidate Submitted Notifications display behavior —
+ui/src/apps/client/modules/Settings/pages/ApplicationSettings/components/
+ReportEventsCCEmailAddressSettings.tsx::ReportEventsCCEmailAddressSettings
+only renders ccEmailAddresses as provided and shows no delimiter conversion logic.
+
+4. PROPOSED SOLUTION
+====================
+Update the ATS integration settings UI so the 'Enable Link to user placing order' CC Email Addresses
+field trims and de-duplicates separators without converting semicolons to commas, preserving
+semicolon-separated values through save and reload. Keep accounts-service schema unchanged because
+the field is already a String, but verify persistence code does not add its own normalization
+before implementation. Leave candidate-service parsing logic unchanged because
+SendDirectRequestEmailHandler.validateEmails already accepts both semicolon- and comma-separated
+stored values, which preserves readability of existing comma-separated records.
+
+5. SERVICES AND CHANGES
+=======================
+ui
+
+(complexity: medium)
+Why: This service is on the reported reproduction path and contains the verified conversion
+logic in AtsIntegrationSectionView/handleCcEmailAddressesBlur.
+ReportEventsCCEmailAddressSettings was examined as the comparison field named in the ticket
+and needs no change because it already renders the stored string directly.
+
+Data model: AtsIntegrationSettings.sendReportRequestedLinkCcEmailAddresses
+Change 1: handleCcEmailAddressesBlur (modify)
+File: src/common/accounts/client/components/SettingsForm/sections/AtsIntegrationSection/view.tsx
+Code check: VERIFIED
+Today: On blur, the function reads atsIntegration.sendReportRequestedLinkCcEmailAddresses,
+splits on both semicolons and commas, trims each token, removes empty tokens, and joins the
+result with commas before calling atsIntegrationChange.
+Change: Modify ATS integration CC email blur normalization so this field preserves semicolon
+separators by rejoining cleaned entries with semicolons instead of commas.
+How: Reuse the existing blur normalization path in handleCcEmailAddressesBlur rather than adding
+a second save-time transform. Keep the current trimming and empty-entry removal, but change
+the delimiter handling for this field so semicolon-separated input stays semicolon-separated
+after atsIntegrationChange. New tests are required because no existing test file sits beside
+this symbol; add them at
+src/common/accounts/client/components/SettingsForm/sections/AtsIntegrationSection/
+view.test.tsx.
+Why: The reported conversion is directly implemented here:
+ui/src/common/accounts/client/components/SettingsForm/sections/AtsIntegrationSection/
+view.tsx::handleCcEmailAddressesBlur
+rejoins with commas. Changing this symbol fixes the verified source of the bad stored value
+for this field only.
+Sketch:
+const trimmed = (atsIntegration.sendReportRequestedLinkCcEmailAddresses ?? "")
+.split(/;+/)
+.map((email) => email.trim())
+.filter((email) => email.length > 0)
+.join(";");
+atsIntegrationChange({
+sendReportRequestedLinkCcEmailAddresses: trimmed,
+});
+Done when:
+- Entering 'alpha@example.com;beta@example.com;gamma@example.com' and blurring the field
+updates sendReportRequestedLinkCcEmailAddresses to
+'alpha@example.com;beta@example.com;gamma@example.com'.
+- Entering ' alpha@example.com ; beta@example.com ;; gamma@example.com ' and blurring the
+field updates sendReportRequestedLinkCcEmailAddresses to
+'alpha@example.com;beta@example.com;gamma@example.com'.
+- If the loaded value is 'old1@example.com,old2@example.com' and the field is not edited, the
+UI continues to display that comma-separated string unchanged on reload.
+Change 2: handleCcEmailAddressesBlur (create)
+File: src/common/accounts/client/components/SettingsForm/sections/AtsIntegrationSection/
+view.test.tsx
+Code check: NEW — New test file in the existing folder
+`src/common/accounts/client/components/SettingsForm/sections/AtsIntegrationSection`.
+Change: Create UI tests for ATS integration CC email blur behavior covering semicolon
+preservation, empty input, and unchanged display of legacy comma-separated values until
+edited.
+How: Add a new test file at the path explicitly indicated for this symbol. Cover the blur path
+in AtsIntegrationSectionView by asserting the value passed through atsIntegrationChange for
+semicolon-separated input, empty input, and a preloaded comma-separated value that is rendered
+without modification until user edit/blur. These tests are TO ADD and should fail against the
+current comma-joining implementation.
+Why: The real code symbols state that no test file sits beside AtsIntegrationSectionView and
+that a new test for it belongs at
+src/common/accounts/client/components/SettingsForm/sections/AtsIntegrationSection/
+view.test.tsx.
+
+The ticket explicitly requires automated coverage for semicolon preservation and legacy
+comma-separated readability.
+Sketch:
+render(AtsIntegrationSectionView with sendReportRequestedLinkCcEmailAddresses)
+change input to 'qa1@example.com;qa2@example.com;qa3@example.com'
+blur input
+expect atsIntegrationChange called with {
+sendReportRequestedLinkCcEmailAddresses: 'qa1@example.com;qa2@example.com;qa3@example.com'
+}
+Done when:
+- A regression test fails today because blur converts
+'qa1@example.com;qa2@example.com;qa3@example.com' to commas, and passes after the fix by
+expecting semicolons.
+- A test verifies empty input remains an empty string after blur.
+- A test verifies a preloaded value 'old1@example.com,old2@example.com' is rendered unchanged
+before any edit.
+Change 3: ReportEventsCCEmailAddressSettings (reference (read, not changed))
+File: src/apps/client/modules/Settings/pages/ApplicationSettings/components/
+ReportEventsCCEmailAddressSettings.tsx
+Code check: VERIFIED
+Today: The component renders ccEmailAddresses ?? '' directly into SettingValueCell without
+transforming delimiters.
+Change: Reference only: use this component's direct value rendering as the comparison point for
+preserving semicolon-separated display behavior in the ATS integration field.
+How: Do not edit this file. It is included so implementers can compare the ATS integration field
+behavior against an existing UI component that already displays the stored string without
+delimiter conversion.
+Why: The ticket names Candidate Submitted Notifications as the expected behavior. This symbol
+shows that field is rendered as-is, which supports keeping other CC email fields unchanged.
+Sketch:
+value={ccEmailAddresses ?? ""}
+Done when:
+- No code change is made to Candidate Submitted Notifications display behavior.
+accounts-service — no change
+This service is on the save/reload path because settings.graphqls defines
+AtsIntegrationSettings.sendReportRequestedLinkCcEmailAddresses and
+AtsIntegrationSettingsInput.sendReportRequestedLinkCcEmailAddresses as String. No resolver or
+persistence code was provided showing delimiter normalization here, so no concrete file change
+can be justified from the evidence; implementation must verify the actual settings mutation
+path does not rewrite the string.
+candidate-service (complexity: low)
+Why: This service is on the end-to-end path because it consumes the stored CC email string when
+sending Candidate Direct emails. Its SendDirectRequestEmailHandler.validateEmails was examined
+and needs no change because it already parses both semicolon- and comma-separated values.
+Change 4: validateEmails (reference (read, not changed))
+File: src/main/kotlin/com/asurint/candidate/handlers/commands/SendDirectRequestEmailHandler.kt
+Code check: VERIFIED
+Today: validateEmails splits the input string on the regex [;,]+, trims each token, and filters
+out empty values before returning the email list.
+Change: Reference only: retain this parser unchanged so downstream email sending continues to
+accept both legacy comma-separated and new semicolon-separated CC email strings.
+How: Do not edit this file. The proposed UI/storage fix relies on this existing parser to keep
+old comma-separated records readable and to support semicolon-separated values after the UI
+change.
+
+Why: candidate-service/src/main/kotlin/com/asurint/candidate/handlers/commands/
+SendDirectRequestEmailHandler.kt::validateEmails
+already accepts both separators, which directly satisfies the ticket requirement that existing
+comma-separated values remain readable.
+Sketch:
+val delimiters = "[;,]+".toRegex()
+return emailString.split(delimiters).map { it.trim() }.filter { it.isNotEmpty() }
+Done when:
+- Semicolon-separated stored values remain sendable without backend parser changes.
+- Comma-separated stored values remain sendable without backend parser changes.
+reports-api — no change
+This service was included because the verified dependency graph lists accounts-service ->
+reports-api and reports-api -> ui, but the provided reports-api symbols concern report/order
+entities, task mutations, and email queued handling, not ATS integration settings persistence
+or display. No provided reports-api code touches sendReportRequestedLinkCcEmailAddresses, so
+no change is justified.
+pdf-service — no change
+This service was included because the verified dependency graph lists candidate-service ->
+pdf-service. The provided pdf-service symbols only generate and merge PDFs and have no
+relation to ATS integration CC email settings, so no change is needed.
+
+6. FILES TO CHANGE
+==================
+ui
+- create: src/common/accounts/client/components/SettingsForm/sections/AtsIntegrationSection/
+view.test.tsx
+- modify: src/common/accounts/client/components/SettingsForm/sections/AtsIntegrationSection/
+view.tsx
+
+7. FILES READ BUT NOT CHANGED
+=============================
+ui
+- src/apps/client/modules/Settings/pages/ApplicationSettings/components/
+ReportEventsCCEmailAddressSettings.tsx
+candidate-service
+- src/main/kotlin/com/asurint/candidate/handlers/commands/SendDirectRequestEmailHandler.kt
+
+8. FLOW
+=======
+Today:
+1. Administrator edits ATS integration CC email field in the UI
+ui/src/common/accounts/client/components/SettingsForm/sections/AtsIntegrationSection/
+view.tsx::AtsIntegrationSectionView
+updates sendReportRequestedLinkCcEmailAddresses from the input value via
+handleCcEmailAddressesChange.
+2. UI normalizes the field on blur before save
+ui/src/common/accounts/client/components/SettingsForm/sections/AtsIntegrationSection/
+view.tsx::handleCcEmailAddressesBlur
+splits on /[;,]+/, trims entries, filters empties, and rejoins with commas.
+
+3. Settings are submitted through accounts-service GraphQL
+accounts-service/src/main/resources/graphql/
+settings.graphqls::AtsIntegrationSettingsInput.sendReportRequestedLinkCcEmailAddresses
+defines the saved field as String.
+4. Stored ATS integration setting is read back for page reload
+accounts-service/src/main/resources/graphql/
+settings.graphqls::AtsIntegrationSettings.sendReportRequestedLinkCcEmailAddresses
+exposes the stored field as String.
+5. UI displays the reloaded value
+ui/src/common/accounts/client/components/SettingsForm/sections/AtsIntegrationSection/
+view.tsx::AtsIntegrationSectionView
+binds the field to atsIntegration.sendReportRequestedLinkCcEmailAddresses, so any stored commas
+are shown back to the user.
+6. Candidate Direct email sending consumes stored CC emails
+candidate-service/src/main/kotlin/com/asurint/candidate/handlers/commands/
+SendDirectRequestEmailHandler.kt::SendDirectRequestEmailHandler.handle
+parses clientCCNotificationsEmails with validateEmails, which accepts both semicolons and
+commas.
+After the change:
+1. Administrator edits ATS integration CC email field in the UI
+ui/src/common/accounts/client/components/SettingsForm/sections/AtsIntegrationSection/
+view.tsx::AtsIntegrationSectionView
+continues to update sendReportRequestedLinkCcEmailAddresses from the input value via
+handleCcEmailAddressesChange.
+2. UI normalizes spacing and empty entries without changing semicolon separators
+ui/src/common/accounts/client/components/SettingsForm/sections/AtsIntegrationSection/
+view.tsx::handleCcEmailAddressesBlur
+should split on semicolons for this field, trim entries, remove empties, and rejoin with
+semicolons.
+3. Settings are submitted through accounts-service GraphQL
+accounts-service/src/main/resources/graphql/
+settings.graphqls::AtsIntegrationSettingsInput.sendReportRequestedLinkCcEmailAddresses
+remains a String and receives the semicolon-preserved value.
+4. Stored ATS integration setting is read back for page reload
+accounts-service/src/main/resources/graphql/
+settings.graphqls::AtsIntegrationSettings.sendReportRequestedLinkCcEmailAddresses
+continues to expose the stored String value.
+5. UI displays the reloaded value
+ui/src/common/accounts/client/components/SettingsForm/sections/AtsIntegrationSection/
+view.tsx::AtsIntegrationSectionView
+shows the semicolon-preserved string exactly as stored; existing comma-separated stored values
+still display unchanged.
+6. Candidate Direct email sending consumes stored CC emails
+candidate-service/src/main/kotlin/com/asurint/candidate/handlers/commands/
+SendDirectRequestEmailHandler.kt::SendDirectRequestEmailHandler.handle
+continues using validateEmails, so both legacy comma-separated and new semicolon-separated
+values remain sendable.
+
+9. ARCHITECTURE
+===============
+The fix stays on the existing settings flow: preserve the delimiter at the UI entry point, keep
+storage as an opaque string, and rely on the existing downstream parser that already accepts both
+delimiter styles.
+Components:
+
+ui, accounts-service, candidate-service, reports-api, pdf-service
+Calls:
+accounts-service --> reports-api
+candidate-service --> pdf-service
+reports-api
+--> ui
+
+(verified in the code graph)
+(verified in the code graph)
+(verified in the code graph)
+
+Communication:
+- accounts-service -> reports-api is a verified dependency from the provided graph, but the
+communication mechanism is not shown in the evidence.
+- reports-api -> ui is a verified dependency from the provided graph, but the communication
+mechanism is not shown in the evidence.
+- candidate-service -> pdf-service is a verified dependency from the provided graph;
+candidate-service summary says it hands off PDFs to pdf service, and pdf-service summary says
+other services request PDFs by message.
+
+10. TESTING
+===========
+The key regression is that the current UI blur logic converts semicolons to commas. Because no
+existing test file sits beside AtsIntegrationSectionView, the required automated coverage must be
+added in the new test file path provided with that symbol.
+- [regression] TO ADD: In ui AtsIntegrationSectionView, enter
+'qa1@example.com;qa2@example.com;qa3@example.com' into sendReportRequestedLinkCcEmailAddresses and
+blur the field; today the blur handler emits 'qa1@example.com,qa2@example.com,qa3@example.com',
+after the fix it must emit 'qa1@example.com;qa2@example.com;qa3@example.com'.
+Expected: The test fails against the current comma-joining implementation and passes after
+handleCcEmailAddressesBlur rejoins with semicolons.
+- [unit] TO ADD: In ui AtsIntegrationSectionView, enter ' alpha@example.com ; beta@example.com ;;
+gamma@example.com ' and blur the field.
+Expected: atsIntegrationChange receives sendReportRequestedLinkCcEmailAddresses equal to
+'alpha@example.com;beta@example.com;gamma@example.com'.
+- [edge_case] TO ADD: In ui AtsIntegrationSectionView, start with an empty
+sendReportRequestedLinkCcEmailAddresses value and blur without entering any emails.
+Expected: atsIntegrationChange receives an empty string and no commas or semicolons are
+introduced.
+- [regression] TO ADD: Render ui AtsIntegrationSectionView with an existing stored value
+'old1@example.com,old2@example.com' and do not edit the field.
+Expected: The input displays 'old1@example.com,old2@example.com' unchanged, confirming legacy
+comma-separated values remain readable until edited.
+- [integration] EXISTING behavior to run after UI fix: candidate-service
+SendDirectRequestEmailHandler.handle processes clientCCNotificationsEmails set to
+'one@example.com;two@example.com;three@example.com'.
+Expected: validateEmails splits the string into three email addresses and email publishing still
+works with semicolon-separated storage.
+- [integration] EXISTING behavior to run after UI fix: candidate-service
+SendDirectRequestEmailHandler.handle processes clientCCNotificationsEmails set to
+'old1@example.com,old2@example.com'.
+Expected: validateEmails splits the string into two email addresses and legacy comma-separated
+storage remains readable.
+
+11. IMPLEMENTATION PLAN
+=======================
+1. Update ui src/common/accounts/client/components/SettingsForm/sections/AtsIntegrationSection/
+
+view.tsx
+handleCcEmailAddressesBlur to keep the existing trim/remove-empty normalization but rejoin
+sendReportRequestedLinkCcEmailAddresses with semicolons instead of commas; this removes the
+verified source of delimiter conversion and is validated by testing_plan scenarios 1, 2, and 3.
+2. Add proposed test file ui
+src/common/accounts/client/components/SettingsForm/sections/AtsIntegrationSection/view.test.tsx
+for handleCcEmailAddressesBlur covering semicolon preservation, whitespace/duplicate separator
+cleanup, empty input, and unchanged rendering of a preloaded comma-separated value; this is
+required by the ticket's automated test criteria and is validated by testing_plan scenarios 1, 2,
+3, and 4.
+3. Inspect accounts-service src/main/resources/graphql/settings.graphqls
+AtsIntegrationSettingsInput.sendReportRequestedLinkCcEmailAddresses and the corresponding settings
+mutation implementation to confirm no backend normalization rewrites the string before
+persistence; if the implementation writes the raw String unchanged, no code edit is needed, and
+this check supports the end-to-end save/reload behavior described in testing_plan scenario 4.
+4. Run existing candidate-service coverage around
+src/main/kotlin/com/asurint/candidate/handlers/commands/SendDirectRequestEmailHandler.kt
+validateEmails to confirm both semicolon-separated and comma-separated clientCCNotificationsEmails
+remain accepted after the UI change; this guards backward compatibility and maps to testing_plan
+scenarios 5 and 6.
+
+12. RISKS
+=========
+- The actual accounts-service resolver/entity that persists
+AtsIntegrationSettings.sendReportRequestedLinkCcEmailAddresses was not provided; if it also
+normalizes delimiters, the UI-only code change will not fully fix save/reload behavior.
+- Editing a legacy comma-separated value and saving after the UI fix will normalize it to
+semicolon-separated format for this field; this matches the ticket intent but changes
+representation on first edit.
+
+13. OPEN QUESTIONS
+==================
+- Which accounts-service resolver or mapper writes
+AtsIntegrationSettingsInput.sendReportRequestedLinkCcEmailAddresses into persistence?
+- Which accounts-service resolver or mapper reads
+AtsIntegrationSettings.sendReportRequestedLinkCcEmailAddresses back for the UI settings page?
+- Where are candidate-service tests for SendDirectRequestEmailHandler.handle or validateEmails
+located, since no test file path was provided beside that symbol?
+
+14. OTHER NOTES
+===============
+Error handling: Current UI blur handling removes empty tokens and trims whitespace but rewrites
+delimiters to commas. The proposed UI change keeps the same empty-token cleanup while preserving
+semicolons for this field. candidate-service currently tolerates both semicolon and comma
+delimiters when sending emails; no new backend error handling is required by the evidence.
+Security: This change affects only formatting and storage of a CC email string field. No
+authentication, authorization, or sensitive-data handling changes are evidenced in the provided
+material.
+Backward compatibility: No API schema change is proposed. Existing comma-separated stored values
+remain readable because candidate-service already parses both delimiters, and the UI should
+
+continue to display legacy comma-separated values unchanged until the field is edited and saved
+again.
+
+
