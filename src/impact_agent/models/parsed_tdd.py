@@ -1,6 +1,6 @@
 """Parser output models.
 
-Person 2 owns this file; copy created so Person 1 can build against the contract.
+Owned by the parser (Person 2). Fields are identical to contract section 4.
 """
 
 from enum import StrEnum
