@@ -1,0 +1,25 @@
+# Virtual environments
+.venv/
+venv/
+
+# Secrets and local configuration (placeholder templates are allowed)
+.env
+.env.*
+!.env.example
+*.local
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Test and coverage artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+.ruff_cache/
+
+# Editors and OS
+.vscode/
+.idea/
+.DS_Store
