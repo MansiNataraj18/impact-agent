@@ -127,3 +127,8 @@ def test_skipped_allows_either():
 
 def test_empty_graph_is_valid():
     assert ImpactGraph(changed="c", nodes=[], source="fixture").nodes == []
+
+
+def test_affected_item_depth_below_one_rejected():
+    with pytest.raises(ValidationError):
+        AffectedItem(node_id="n", name="n", kind="method", depth=0, reason="r")

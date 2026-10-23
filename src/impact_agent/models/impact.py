@@ -72,7 +72,7 @@ class AffectedItem(BaseModel):
     kind: NodeKind
     service: str | None = None
     location: str | None = None
-    depth: int
+    depth: int = Field(ge=1)
     reason: str
 
 
