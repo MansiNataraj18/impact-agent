@@ -183,3 +183,31 @@ def test_never_raises_on_every_prefix_of_the_sample():
     text = "\n".join(sample_lines())
     for cut in range(0, len(text), 997):
         parse_tdd(text[:cut])
+
+
+def test_change_after_no_change_heading_does_not_inherit_the_earlier_service(sample_text):
+    text = sample_text.replace(
+        "reports-api — no change",
+        "reports-api — no change\n"
+        "Change 5: extra (modify)\n"
+        "File: a/b.py\n"
+        "Code check: VERIFIED\n"
+        "Change: x\n"
+        "Done when:\n"
+        "- y",
+        1,
+    )
+    parsed = parse_tdd(text)
+    extra = next(c for c in parsed.changes if c.number == 5)
+    assert extra.service is None
+    assert any(
+        i.scope == "change" and i.change_number == 5 and i.field == "service"
+        for i in parsed.unresolved
+    )
+    # the real changes keep their own services
+    assert [c.service for c in parsed.changes if c.number != 5] == [
+        "ui",
+        "ui",
+        "ui",
+        "candidate-service",
+    ]

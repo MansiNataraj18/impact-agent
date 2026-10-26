@@ -38,6 +38,7 @@ REASON_NO_FILE = "No 'File:' value found"
 REASON_NO_CODE_CHECK = "No valid 'Code check:' (VERIFIED or NEW) found"
 REASON_NO_SUMMARY = "No 'Change:' text found"
 REASON_NO_SERVICE = "No service heading precedes this change"
+REASON_AFTER_NO_CHANGE = "This change follows a 'no change' service heading, not a changed service"
 REASON_NO_DONE_WHEN = "No 'Done when:' list found"
 REASON_NO_BOUNDARY = "No boundary found after the change block"
 
@@ -128,14 +129,19 @@ def parse_changes(
     unresolved: list[UnresolvedItem] = []
     seen_numbers: set[int] = set()
     service: str | None = None
+    after_no_change = False
 
     for position, marker in enumerate(markers):
         if marker.kind == "service":
             service = marker.name
+            after_no_change = False
             continue
         if marker.kind == "no_change":
             if marker.name not in no_change:
                 no_change.append(marker.name)
+            # Never guess: a change after a no-change heading must not inherit the earlier service.
+            service = None
+            after_no_change = True
             continue
         if marker.kind == "bad_change":
             number = int(CHANGE_LIKE_RE.match(norm[marker.line]).group(1))
@@ -179,7 +185,7 @@ def parse_changes(
             )
 
         if service is None:
-            missing("service", REASON_NO_SERVICE)
+            missing("service", REASON_AFTER_NO_CHANGE if after_no_change else REASON_NO_SERVICE)
         if file is None:
             missing("file", REASON_NO_FILE)
         if code_check is None:
