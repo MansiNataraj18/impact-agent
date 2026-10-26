@@ -140,6 +140,14 @@ uv run python scripts/demo_core.py
 uv run python scripts/run_stub_flow.py
 ```
 
+The package is not installed (`package = false`), so running Python directly (outside `uv run` with the project's pytest/uvicorn setup) needs `PYTHONPATH=src`:
+
+```zsh
+PYTHONPATH=src python scripts/check_real_tdds.py <folder-of-tdd-text-files>
+```
+
+If `uv sync` fails (for example a 403 downloading the Aetherion SDK wheel), `uv run --no-sync ...` works with an existing environment.
+
 Start the API (the package is not installed, so point uvicorn at `src`):
 
 ```zsh

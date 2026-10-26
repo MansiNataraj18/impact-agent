@@ -264,10 +264,16 @@ All external responses carry `schema_version`. Changing any model or enum in thi
 
 ## 11. Open items
 
-- Whether `relation` should be a fixed set of values instead of a free string.
-- How long idempotent results are kept, and where (in-memory for now).
-- How the Aetherion SDK is used by the agent entry point.
-- Line-wrap width and exact wording of non-analysed risk text, once reviewed on real output.
+Current behaviour is stated where it exists; none of these are final until both people agree.
+
+- Whether `relation` should be a fixed set of values instead of a free string (free string now; revisit once the real graph labels are known).
+- How long idempotent results are kept: currently 1 hour (`DEFAULT_TTL_SECONDS` in `api/idempotency.py`), in memory, injectable clock for tests. Whether the TTL should be configurable is open.
+- Final wording of the risk text for changes that are not analysed (`SUMMARY_NOT_ANALYSED` in `core/analyzer.py`), once reviewed on real output.
+- Where `ResponseStatus` lives (currently `api/schemas.py`).
+- Whether `FakeGraphProvider` stays the default when no graph connection is configured.
+- Whether the `neo4j` package may be added once graph access exists. The Cypher in `providers/neo4j_provider.py` is placeholder until the real labels, relationship types, property names and test-node marking are known.
+- How the Aetherion SDK is used by the agent entry point (`handle_tdd` in `agent.py` is not yet registered).
+- Line-wrap width, once reviewed on real output.
 
 ## 12. Rendering details (as implemented)
 
