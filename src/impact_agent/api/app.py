@@ -10,9 +10,18 @@ from impact_agent.providers.base import GraphProvider
 from impact_agent.providers.fake import FakeGraphProvider
 
 
+class QuietFakeLLM(FakeLLM):
+    """DUMMY: a FakeLLM that does not keep prompts, so a long-running server does not grow."""
+
+    def complete(self, prompt: str) -> str:
+        reply = super().complete(prompt)
+        self.prompts.clear()
+        return reply
+
+
 def default_engine() -> ImpactEngine:
     """DUMMY: a fake LLM that always gives the same fixture analysis. Not a real model."""
-    return DefaultImpactEngine(FakeLLM.for_scenario("minimal_valid"))
+    return DefaultImpactEngine(QuietFakeLLM.for_scenario("minimal_valid"))
 
 
 def create_app(
