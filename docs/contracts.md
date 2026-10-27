@@ -262,16 +262,20 @@ Pipeline order: `strip_impact_sections` then `parse_tdd`, then `GraphProvider.ge
 
 All external responses carry `schema_version`. Changing any model or enum in this file requires both people's approval and a version bump if the external shape changes.
 
-## 11. Open items
+## 11. Decisions and open items
 
-Current behaviour is stated where it exists; none of these are final until both people agree.
+Decided (2026-10-27, pending the second person's approval per section 10):
+
+- Idempotent results are kept in memory for 1 hour by default. The TTL is configurable with `create_app(ttl_seconds=...)` or the `IMPACT_IDEMPOTENCY_TTL_SECONDS` environment variable (`none` keeps results forever).
+- `ResponseStatus` stays in `api/schemas.py`.
+- `FakeGraphProvider` is the default when no graph provider is configured, and the app logs a warning when it is used.
+- The `neo4j` package will be added as a normal dependency once graph access exists (not added yet).
+
+Open:
 
 - Whether `relation` should be a fixed set of values instead of a free string (free string now; revisit once the real graph labels are known).
-- How long idempotent results are kept: currently 1 hour (`DEFAULT_TTL_SECONDS` in `api/idempotency.py`), in memory, injectable clock for tests. Whether the TTL should be configurable is open.
 - Final wording of the risk text for changes that are not analysed (`SUMMARY_NOT_ANALYSED` in `core/analyzer.py`), once reviewed on real output.
-- Where `ResponseStatus` lives (currently `api/schemas.py`).
-- Whether `FakeGraphProvider` stays the default when no graph connection is configured.
-- Whether the `neo4j` package may be added once graph access exists. The Cypher in `providers/neo4j_provider.py` is placeholder until the real labels, relationship types, property names and test-node marking are known.
+- The real graph labels, relationship types, property names and test-node marking. The Cypher in `providers/neo4j_provider.py` is placeholder until then.
 - How the Aetherion SDK is used by the agent entry point (`handle_tdd` in `agent.py` is not yet registered).
 - Line-wrap width, once reviewed on real output.
 
