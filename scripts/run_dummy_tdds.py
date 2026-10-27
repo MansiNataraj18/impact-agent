@@ -1,10 +1,11 @@
 """Run the full pipeline (parse -> fake graph -> dummy LLM -> render) on a folder of TDDs.
 
 Run from the repository root:
-  uv run python scripts/run_dummy_tdds.py [folder] [--scenario normal] [--out out_dir]
+  uv run python scripts/run_dummy_tdds.py [folder] [--graph fixture|dummy]
+      [--scenario normal] [--out out_dir]
 
-Everything is dummy: fixture graphs and a fake LLM. With --out, each rendered TDD is written
-to <out>/<name>.out.txt; without it only a summary is printed.
+Everything is dummy: fixture or dummy graphs and a fake LLM. With --out, each rendered TDD is
+written to <out>/<name>.out.txt; without it only a summary is printed.
 """
 
 import argparse
@@ -19,14 +20,22 @@ from impact_agent.api.pipeline import run_pipeline  # noqa: E402
 from impact_agent.api.schemas import ImpactRequest  # noqa: E402
 from impact_agent.providers.fake import FakeGraphProvider  # noqa: E402
 from impact_agent.providers.fixtures import SCENARIOS  # noqa: E402
+from impact_agent.providers.neo4j_provider import Neo4jGraphProvider  # noqa: E402
 
 DEFAULT_FOLDER = ROOT / "tests" / "fixtures" / "dummy_tdds"
+sys.path.insert(0, str(ROOT / "tests" / "fixtures"))
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("folder", nargs="?", default=str(DEFAULT_FOLDER))
     parser.add_argument("--scenario", default="normal", choices=sorted(SCENARIOS))
+    parser.add_argument(
+        "--graph",
+        choices=["fixture", "dummy"],
+        default="fixture",
+        help="fixture: canned scenarios; dummy: dummy graph through Neo4jGraphProvider",
+    )
     parser.add_argument("--out", help="write rendered output files to this folder")
     args = parser.parse_args()
 
@@ -37,7 +46,12 @@ def main() -> None:
     out = Path(args.out) if args.out else None
     if out:
         out.mkdir(parents=True, exist_ok=True)
-    provider = FakeGraphProvider(args.scenario)
+    if args.graph == "dummy":
+        from dummy_graph import dummy_run_query
+
+        provider = Neo4jGraphProvider(dummy_run_query)
+    else:
+        provider = FakeGraphProvider(args.scenario)
     for path in files:
         with open(path, encoding="utf-8", newline="") as handle:
             text = handle.read()

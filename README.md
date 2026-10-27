@@ -152,6 +152,12 @@ Run the whole pipeline on the dummy TDDs in `tests/fixtures/dummy_tdds/` with an
 uv run python scripts/run_dummy_tdds.py --scenario cross_service --out /tmp/dummy_out
 ```
 
+To run the same TDDs through `Neo4jGraphProvider` against a dummy in-memory graph (no database), use `--graph dummy`. The graph lives in `tests/fixtures/dummy_graph.py` and only knows the dummy TDDs and the sample.
+
+```zsh
+uv run python scripts/run_dummy_tdds.py --graph dummy
+```
+
 If `uv sync` fails (for example a 403 downloading the Aetherion SDK wheel), `uv run --no-sync ...` works with an existing environment.
 
 Start the API (the package is not installed, so point uvicorn at `src`):
