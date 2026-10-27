@@ -1,13 +1,44 @@
+import logging
+import os
+
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
-from impact_agent.api.idempotency import IdempotencyConflict, IdempotencyStore
+from impact_agent.api.idempotency import (
+    DEFAULT_TTL_SECONDS,
+    IdempotencyConflict,
+    IdempotencyStore,
+)
 from impact_agent.api.pipeline import run_pipeline
 from impact_agent.api.schemas import ImpactRequest, ImpactResponse, ResponseStatus
 from impact_agent.core.engine import DefaultImpactEngine, ImpactEngine
 from impact_agent.core.llm import FakeLLM
 from impact_agent.providers.base import GraphProvider
 from impact_agent.providers.fake import FakeGraphProvider
+
+logger = logging.getLogger(__name__)
+
+TTL_ENV_VAR = "IMPACT_IDEMPOTENCY_TTL_SECONDS"
+FAKE_GRAPH_WARNING = (
+    "No graph provider configured: using FakeGraphProvider. Results are fixture data, "
+    "not real impact analysis."
+)
+
+
+def ttl_from_env() -> float | None:
+    """Idempotency TTL in seconds from the environment. 'none' keeps results forever."""
+    raw = os.environ.get(TTL_ENV_VAR)
+    if raw is None or not raw.strip():
+        return DEFAULT_TTL_SECONDS
+    if raw.strip().lower() == "none":
+        return None
+    try:
+        ttl = float(raw)
+    except ValueError:
+        raise ValueError(f"{TTL_ENV_VAR} must be a number of seconds or 'none', got {raw!r}")
+    if ttl <= 0:
+        raise ValueError(f"{TTL_ENV_VAR} must be greater than 0, got {raw!r}")
+    return ttl
 
 
 class QuietFakeLLM(FakeLLM):
@@ -25,11 +56,16 @@ def default_engine() -> ImpactEngine:
 
 
 def create_app(
-    provider: GraphProvider | None = None, engine: ImpactEngine | None = None
+    provider: GraphProvider | None = None,
+    engine: ImpactEngine | None = None,
+    ttl_seconds: float | None = None,
 ) -> FastAPI:
-    provider = provider or FakeGraphProvider("normal")  # DUMMY fixture graphs
+    """`ttl_seconds` overrides the environment setting; None reads it from the environment."""
+    if provider is None:
+        logger.warning(FAKE_GRAPH_WARNING)
+        provider = FakeGraphProvider("normal")  # DUMMY fixture graphs
     engine = engine or default_engine()
-    store = IdempotencyStore()
+    store = IdempotencyStore(ttl_seconds=ttl_seconds if ttl_seconds is not None else ttl_from_env())
     app = FastAPI(title="Impact Agent")
 
     @app.get("/health")
