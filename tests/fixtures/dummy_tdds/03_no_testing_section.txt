@@ -1,0 +1,75 @@
+TECHNICAL DESIGN DOCUMENT
+Trim whitespace from the display name in the profile form
+Generated: 2026-10-21T10:00:00+00:00
+############################################################
+
+1. SUMMARY
+==========
+The profile form saves display names with leading and trailing spaces.
+
+2. REQUIREMENTS
+===============
+- Display names must be trimmed before they are saved.
+
+3. ROOT CAUSE
+=============
+Confirmed: handleNameBlur stores the raw input value.
+
+4. PROPOSED SOLUTION
+====================
+Trim the value in handleNameBlur before saving.
+
+5. SERVICES AND CHANGES
+=======================
+ui
+
+(complexity: low)
+Why: The raw value is stored in the UI.
+Change 1: handleNameBlur (modify)
+File: src/profile/form/view.tsx
+Code check: VERIFIED
+Today: The blur handler saves the raw input value.
+Change: Trim the value before saving it.
+How: Call trim() on the input value in handleNameBlur.
+Why: This is where the untrimmed value is stored.
+Sketch:
+save(value.trim());
+Done when:
+- Entering '  Ada  ' and blurring saves 'Ada'.
+
+6. FILES TO CHANGE
+==================
+ui
+- modify: src/profile/form/view.tsx
+
+7. FILES READ BUT NOT CHANGED
+=============================
+None
+
+8. FLOW
+=======
+Today:
+1. The user edits the name and blurs the field.
+After the change:
+1. The value is trimmed on blur.
+
+9. ARCHITECTURE
+===============
+Components:
+ui
+
+11. IMPLEMENTATION PLAN
+=======================
+1. Update handleNameBlur.
+
+12. RISKS
+=========
+- None known.
+
+13. OPEN QUESTIONS
+==================
+- None.
+
+14. OTHER NOTES
+===============
+None.

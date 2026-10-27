@@ -146,6 +146,12 @@ The package is not installed (`package = false`), so running Python directly (ou
 PYTHONPATH=src python scripts/check_real_tdds.py <folder-of-tdd-text-files>
 ```
 
+Run the whole pipeline on the dummy TDDs in `tests/fixtures/dummy_tdds/` with any fixture graph scenario (`normal`, `no_tests`, `empty`, `cross_service`, `missing_evidence`); add `--out some_folder` to write the rendered TDDs:
+
+```zsh
+uv run python scripts/run_dummy_tdds.py --scenario cross_service --out /tmp/dummy_out
+```
+
 If `uv sync` fails (for example a 403 downloading the Aetherion SDK wheel), `uv run --no-sync ...` works with an existing environment.
 
 Start the API (the package is not installed, so point uvicorn at `src`):
